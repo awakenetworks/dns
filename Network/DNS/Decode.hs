@@ -4,6 +4,7 @@ module Network.DNS.Decode (
     decode
   , decodeMany
   , receive
+  , receiveVC
   ) where
 
 import Control.Applicative (many)
@@ -15,8 +16,9 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as BL
-import Data.Conduit (($$), Source)
+import Data.Conduit (($$), ($$+), ($$+-), (=$), Source)
 import Data.Conduit.Network (sourceSocket)
+import qualified Data.Conduit.Binary as CB
 import Data.IP (IP(..), toIPv4, toIPv6b)
 import Data.Typeable (Typeable)
 import Data.Word (Word16)
@@ -42,6 +44,19 @@ instance ControlException.Exception RDATAParseError
 
 receive :: Socket -> IO DNSMessage
 receive = receiveDNSFormat . sourceSocket
+
+-- | Receive and parse a single virtual-circuit (TCP) response.  It
+--   is up to the caller to implement any desired timeout.  This
+--   (and the other response decoding functions) may throw ParseError
+--   when the server response is incomplete or malformed.
+
+receiveVC :: Socket -> IO DNSMessage
+receiveVC sock = runResourceT $ do
+    (src, lenbytes) <- sourceSocket sock $$+ CB.take 2
+    let len = case (map fromIntegral $ BL.unpack lenbytes) of
+                hi:lo:[] -> 256 * hi + lo
+                _        -> 0
+    src $$+- CB.isolate len =$ sinkSGet decodeResponse >>= return . fst
 
 ----------------------------------------------------------------
 
@@ -196,8 +211,12 @@ decodeRData DNAME _ = RD_DNAME <$> decodeDomain
 decodeRData TXT len = (RD_TXT . ignoreLength) <$> getNByteString len
   where
     ignoreLength = BS.tail
-decodeRData A len  = (RD_A . toIPv4) <$> getNBytes len
-decodeRData AAAA len  = (RD_AAAA . toIPv6b) <$> getNBytes len
+decodeRData A len
+  | len == 4  = (RD_A . toIPv4) <$> getNBytes len
+  | otherwise = fail "IPv4 addresses must be 4 bytes long"
+decodeRData AAAA len
+  | len == 16 = (RD_AAAA . toIPv6b) <$> getNBytes len
+  | otherwise = fail "IPv6 addresses must be 16 bytes long"
 decodeRData SOA _ = RD_SOA <$> decodeDomain
                            <*> decodeDomain
                            <*> decodeSerial
@@ -237,9 +256,9 @@ decodeRData TLSA len = RD_TLSA <$> decodeUsage
                                <*> decodeMType
                                <*> decodeADF
   where
-    decodeUsage    = getInt8
-    decodeSelector = getInt8
-    decodeMType    = getInt8
+    decodeUsage    = get8
+    decodeSelector = get8
+    decodeMType    = get8
     decodeADF      = getNByteString (len - 3)
 decodeRData _  len = RD_OTH <$> getNByteString len
 
@@ -265,7 +284,7 @@ decodeDomain = do
     let n = getValue c
     -- Syntax hack to avoid using MultiWayIf
     case () of
-        _ | c == 0 -> return ""
+        _ | c == 0 -> return "." -- Perhaps the root domain?
         _ | isPointer c -> do
             d <- getInt8
             let offset = n * 256 + d
@@ -281,7 +300,10 @@ decodeDomain = do
         _ | otherwise -> do
             hs <- getNByteString n
             ds <- decodeDomain
-            let dom = hs `BS.append` "." `BS.append` ds
+            let dom =
+                    case ds of -- avoid trailing ".."
+                        "." -> hs `BS.append` "."
+                        _   -> hs `BS.append` "." `BS.append` ds
             push pos dom
             return dom
   where

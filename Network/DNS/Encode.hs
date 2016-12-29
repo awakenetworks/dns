@@ -2,6 +2,7 @@
 
 module Network.DNS.Encode (
     encode
+  , encodeVC
   , composeQuery
   , composeQueryAD
   ) where
@@ -60,6 +61,11 @@ composeQueryAD idt qs = encode qry
 
 encode :: DNSMessage -> ByteString
 encode msg = runSPut (encodeDNSMessage msg)
+
+encodeVC :: ByteString -> ByteString
+encodeVC query =
+    let len = BB.toLazyByteString $ BB.int16BE $ fromIntegral $ BL.length query
+    in len <> query
 
 ----------------------------------------------------------------
 
@@ -170,9 +176,9 @@ encodeRDATA rd = case rd of
         , encodeDomain dom
         ]
     (RD_TLSA u s m d) -> mconcat
-        [ putInt8 u
-        , putInt8 s
-        , putInt8 m
+        [ put8 u
+        , put8 s
+        , put8 m
         , putByteString d
         ]
 
@@ -201,9 +207,12 @@ putByteStringWithLength bs = putInt8 (fromIntegral $ BS.length bs) -- put the le
 
 ----------------------------------------------------------------
 
+rootDomain :: Domain
+rootDomain = BS.pack "."
+
 encodeDomain :: Domain -> SPut
 encodeDomain dom
-    | BS.null dom = put8 0
+    | (BS.null dom || dom == rootDomain) = put8 0
     | otherwise = do
         mpos <- wsPop dom
         cur <- gets wsPosition

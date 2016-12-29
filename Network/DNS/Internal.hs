@@ -10,11 +10,15 @@ import qualified Data.ByteString.Lazy as L
 import Data.IP (IP, IPv4, IPv6)
 import Data.Maybe (fromMaybe)
 import Data.Typeable (Typeable)
+import Data.Word (Word8)
 
 ----------------------------------------------------------------
 
 -- | Type for domain.
 type Domain = ByteString
+
+-- | Return type of composeQuery from Encode, needed in Resolver
+type Query = L.ByteString
 
 ----------------------------------------------------------------
 
@@ -115,9 +119,8 @@ data DNSError =
     -- | The name server was unable to process this query due to a
     --   problem with the name server.
   | ServerFailure
-    -- | Meaningful only for responses from an authoritative name
-    -- server, this code signifies that the
-    -- domain name referenced in the query does not exist.
+    -- | This code signifies that the domain name referenced in the
+    --   query does not exist.
   | NameError
     -- | The name server does not support the requested kind of query.
   | NotImplemented
@@ -226,7 +229,7 @@ data RData = RD_NS Domain
            | RD_SRV Int Int Int Domain
            | RD_OPT [OData]
            | RD_OTH ByteString
-           | RD_TLSA Int Int Int ByteString
+           | RD_TLSA Word8 Word8 Word8 ByteString
     deriving (Eq, Ord)
 
 instance Show RData where
