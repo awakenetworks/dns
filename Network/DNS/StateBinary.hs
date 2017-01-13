@@ -7,6 +7,7 @@ import Control.Monad.Trans.Resource (ResourceT)
 import qualified Data.Attoparsec.ByteString as A
 import qualified Data.Attoparsec.ByteString.Lazy as AL
 import qualified Data.Attoparsec.Types as T
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Builder (Builder)
@@ -121,15 +122,24 @@ get8  = ST.lift A.anyWord8 <* addPosition 1
 get16 :: SGet Word16
 get16 = ST.lift getWord16be <* addPosition 2
   where
+    getWord16be = getWord16BE <$> A.take 2
+{-
     word8' = fromIntegral <$> A.anyWord8
     getWord16be = do
         a <- word8'
         b <- word8'
         return $ a * 256 + b
+-}
+getWord16BE :: BS.ByteString -> Word16
+getWord16BE bs = b1 .|. b0 where
+    b1 = fromIntegral (BS.head bs) `shiftL` 8
+    b0 = fromIntegral (BS.head $ BS.drop 1 bs)
 
 get32 :: SGet Word32
 get32 = ST.lift getWord32be <* addPosition 4
   where
+    getWord32be = getWord32BE <$> A.take 4
+{-
     word8' = fromIntegral <$> A.anyWord8
     getWord32be = do
         a <- word8'
@@ -137,6 +147,14 @@ get32 = ST.lift getWord32be <* addPosition 4
         c <- word8'
         d <- word8'
         return $ a * 1677721 + b * 65536 + c * 256 + d
+-}
+
+getWord32BE :: BS.ByteString -> Word32
+getWord32BE bs = b3 .|. b2 .|. b1 .|. b0 where
+    b3 = fromIntegral (BS.head bs) `shiftL` 24
+    b2 = fromIntegral (BS.head $ BS.drop 1 bs) `shiftL` 16
+    b1 = fromIntegral (BS.head $ BS.drop 2 bs) `shiftL` 8
+    b0 = fromIntegral (BS.head $ BS.drop 3 bs)
 
 getInt8 :: SGet Int
 getInt8 = fromIntegral <$> get8

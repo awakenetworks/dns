@@ -97,13 +97,15 @@ decodeResponse = do
 
 ----------------------------------------------------------------
 
+{-
 decodeFlags :: SGet DNSFlags
 decodeFlags = do
     word <- get16
     maybe (fail "Unsupported flags") pure (toFlags word)
-  where
-    toFlags :: Word16 -> Maybe DNSFlags
-    toFlags flgs = do
+-}
+
+toFlags :: Word16 -> Maybe DNSFlags
+toFlags flgs = do
       opcode_ <- getOpcode flgs
       rcode_ <- getRcode flgs
       return $ DNSFlags (getQorR flgs)
@@ -114,6 +116,7 @@ decodeFlags = do
                         (getRecAvailable flgs)
                         rcode_
                         (getAuthenData flgs)
+  where
     getQorR w = if testBit w 15 then QR_Response else QR_Query
     getOpcode w = Safe.toEnumMay (fromIntegral (shiftR w 11 .&. 0x0f))
     getAuthAnswer w = testBit w 10
@@ -125,7 +128,18 @@ decodeFlags = do
 
 ----------------------------------------------------------------
 
-decodeHeader :: SGet (DNSHeader,Int,Int,Int,Int)
+decodeHeader :: SGet (DNSHeader, Int, Int, Int, Int)
+decodeHeader = do
+    w <- getNByteString 12
+    let decodeID = fromIntegral . getWord16BE $ w  -- 2 bytes
+        flagsMy = toFlags . getWord16BE . B.drop 2 $ w --2 bytes
+        qdCount = fromIntegral . getWord16BE . B.drop 4 $ w -- 2 bytes
+        anCount = fromIntegral . getWord16BE . B.drop 6 $ w -- 2 bytes
+        nsCount = fromIntegral . getWord16BE . B.drop 8 $ w -- 2 bytes
+        arCount = fromIntegral . getWord16BE . B.drop 10 $ w -- 2 bytes
+        mkRes myFlags = return (DNSHeader decodeID myFlags, qdCount, anCount, nsCount, arCount)
+    maybe (fail "unsupported flags") mkRes flagsMy
+{-
 decodeHeader = do
         hd <- DNSHeader <$> decodeIdentifier
                         <*> decodeFlags
@@ -145,22 +159,27 @@ decodeHeader = do
     decodeAnCount = getInt16
     decodeNsCount = getInt16
     decodeArCount = getInt16
+-}
 
 ----------------------------------------------------------------
 
 decodeQueries :: Int -> SGet [Question]
 decodeQueries n = replicateM n decodeQuery
 
-decodeType :: SGet TYPE
-decodeType = intToType <$> getInt16
+--decodeType :: SGet TYPE
+--decodeType = intToType <$> getInt16
 
-decodeOptType :: SGet OPTTYPE
-decodeOptType = intToOptType <$> getInt16
+--decodeOptType :: SGet OPTTYPE
+--decodeOptType = intToOptType <$> getInt16
 
 decodeQuery :: SGet Question
+decodeQuery = go <$> decodeDomain <*> getNByteString 4 where
+    go dd bs = Question dd (intToType . fromIntegral . getWord16BE $ bs)
+{-
 decodeQuery = Question <$> decodeDomain
                        <*> decodeType
                        <*  ignoreClass
+-}
 
 decodeRRs :: Int -> SGet [ResourceRecord]
 decodeRRs n = replicateM n decodeRR
@@ -168,15 +187,40 @@ decodeRRs n = replicateM n decodeRR
 decodeRR :: SGet ResourceRecord
 decodeRR = do
     dom <- decodeDomain
-    typ <- decodeType
-    decodeRR' dom typ
+    bs <- getNByteString 10
+    let typ = intToType . fromIntegral . getWord16BE $ bs -- decodeType
+        decodeBytes = B.drop 2 bs
+    decodeRR' decodeBytes dom typ
   where
-    decodeRR' _ OPT = do
-        udps <- decodeUDPSize
-        _ <- decodeERCode
-        ver <- decodeOPTVer
-        dok <- decodeDNSOK
-        len <- decodeRLen
+    decodeRR' bytes _ OPT = do
+        let udps = fromIntegral . getWord16BE $ bytes -- 2 bytes
+            -- _ = decodeERCode  -- 1 byte
+            ver = fromIntegral . B.head . B.drop 3 $ bytes -- 1 byte
+            dok =  flip testBit 15 . getWord16BE . B.drop 4 $ bytes -- 2 bytes
+            len = fromIntegral . getWord16BE . B.drop 6 $ bytes -- 2 bytes
+        dat <- decodeRData OPT len
+        return OptRecord { orudpsize = udps
+                         , ordnssecok = dok
+                         , orversion = ver
+                         , rdata = dat
+                         }
+    decodeRR' bytes dom t = do
+        let -- _ = ignoreClass  -- 2 bytes
+            ttl = fromIntegral . getWord32BE . B.drop 2 $ bytes -- 4 bytes
+            len = fromIntegral . getWord16BE . B.drop 6 $ bytes -- 2 bytes
+        dat <- decodeRData t len
+        return ResourceRecord { rrname = dom
+                              , rrtype = t
+                              , rrttl  = ttl
+                              , rdata  = dat
+                              }
+{-
+    decodeRR' bytes _ OPT = do
+        udps <- decodeUDPSize -- 2 bytes
+        _ <- decodeERCode  -- 1 byte
+        ver <- decodeOPTVer -- 1 byte
+        dok <- decodeDNSOK -- 2 bytes
+        len <- decodeRLen -- 2 bytes
         dat <- decodeRData OPT len
         return OptRecord { orudpsize = udps
                          , ordnssecok = dok
@@ -184,10 +228,10 @@ decodeRR = do
                          , rdata = dat
                          }
 
-    decodeRR' dom t = do
-        ignoreClass
-        ttl <- decodeTTL
-        len <- decodeRLen
+    decodeRR' bytes dom t = do
+        ignoreClass  -- 2 bytes
+        ttl <- decodeTTL -- 4 bytes
+        len <- decodeRLen -- 2 bytes
         dat <- decodeRData t len
         return ResourceRecord { rrname = dom
                               , rrtype = t
@@ -200,7 +244,7 @@ decodeRR = do
     decodeDNSOK = flip testBit 15 <$> getInt16
     decodeTTL = fromIntegral <$> get32
     decodeRLen = getInt16
-
+-}
 decodeRData :: TYPE -> Int -> SGet RData
 decodeRData NS _ = RD_NS <$> decodeDomain
 decodeRData MX _ = RD_MX <$> decodePreference <*> decodeDomain
@@ -217,6 +261,21 @@ decodeRData A len
 decodeRData AAAA len
   | len == 16 = (RD_AAAA . toIPv6b) <$> getNBytes len
   | otherwise = fail "IPv6 addresses must be 16 bytes long"
+decodeRData SOA _ = go <$> decodeDomain <*> decodeDomain <*> getNByteString 20 where
+    go dd0 dd1 bs = RD_SOA dd0
+                           dd1
+                           decodeSerial
+                           decodeRefesh
+                           decodeRetry
+                           decodeExpire
+                           decodeMinumun
+      where
+        decodeSerial  = fromIntegral . getWord32BE $ bs
+        decodeRefesh  = fromIntegral . getWord32BE . B.drop 4 $ bs
+        decodeRetry   = fromIntegral . getWord32BE . B.drop 8 $ bs
+        decodeExpire  = fromIntegral . getWord32BE . B.drop 12 $ bs
+        decodeMinumun = fromIntegral . getWord32BE . B.drop 16 $ bs
+{-
 decodeRData SOA _ = RD_SOA <$> decodeDomain
                            <*> decodeDomain
                            <*> decodeSerial
@@ -230,7 +289,18 @@ decodeRData SOA _ = RD_SOA <$> decodeDomain
     decodeRetry   = getInt32
     decodeExpire  = getInt32
     decodeMinumun = getInt32
+-}
 decodeRData PTR _ = RD_PTR <$> decodeDomain
+decodeRData SRV _ = go <$> getNByteString 6 <*> decodeDomain where
+    go bs dd = RD_SRV decodePriority
+                      decodeWeight
+                      decodePort
+                      dd
+      where
+        decodePriority = fromIntegral . getWord16BE $ bs
+        decodeWeight   = fromIntegral . getWord16BE . B.drop 2 $ bs
+        decodePort     = fromIntegral . getWord16BE . B.drop 4 $ bs
+{-
 decodeRData SRV _ = RD_SRV <$> decodePriority
                            <*> decodeWeight
                            <*> decodePort
@@ -239,6 +309,7 @@ decodeRData SRV _ = RD_SRV <$> decodePriority
     decodePriority = getInt16
     decodeWeight   = getInt16
     decodePort     = getInt16
+-}
 decodeRData OPT ol = RD_OPT <$> decode' ol
   where
     decode' :: Int -> SGet [OData]
@@ -246,11 +317,25 @@ decodeRData OPT ol = RD_OPT <$> decode' ol
         | l  < 0 = fail "decodeOPTData: length inconsistency"
         | l == 0 = pure []
         | otherwise = do
-            optCode <- decodeOptType
-            optLen <- getInt16
+            bs <- getNByteString 4
+            let optCode = intToOptType . fromIntegral . getWord16BE $ bs
+                optLen = fromIntegral . getWord16BE . B.drop 2 $ bs
+--            optCode <- decodeOptType
+--            optLen <- getInt16
             dat <- decodeOData optCode optLen
             (dat:) <$> decode' (l - optLen - 4)
 --
+decodeRData TLSA len = go <$> getNByteString len where
+    go bs = RD_TLSA decodeUsage
+                    decodeSelector
+                    decodeMType
+                    decodeADF
+      where
+        decodeUsage    = B.head $ bs
+        decodeSelector = B.head . B.drop 1 $ bs
+        decodeMType    = B.head . B.drop 2 $ bs
+        decodeADF      = B.drop 3 bs
+{-
 decodeRData TLSA len = RD_TLSA <$> decodeUsage
                                <*> decodeSelector
                                <*> decodeMType
@@ -260,19 +345,21 @@ decodeRData TLSA len = RD_TLSA <$> decodeUsage
     decodeSelector = get8
     decodeMType    = get8
     decodeADF      = getNByteString (len - 3)
+-}
 decodeRData _  len = RD_OTH <$> getNByteString len
 
 decodeOData :: OPTTYPE -> Int -> SGet OData
 decodeOData ClientSubnet len = do
-        fam <- getInt16
-        srcMask <- getInt8
-        scpMask <- getInt8
-        rawip <- fmap fromIntegral . B.unpack <$> getNByteString (len - 4) -- 4 = 2 + 1 + 1
-        ip <- case fam of
-                    1 -> pure . IPv4 . toIPv4 $ take 4 (rawip ++ repeat 0)
-                    2 -> pure . IPv6 . toIPv6b $ take 16 (rawip ++ repeat 0)
-                    _ -> fail "Unsupported address family"
-        pure $ OD_ClientSubnet srcMask scpMask ip
+    bytes <- getNByteString (32 + len - 4)
+    let fam = getWord16BE $ bytes --  getInt16
+        srcMask = fromIntegral . B.head . B.drop 2 $ bytes -- getInt8
+        scpMask = fromIntegral . B.head . B.drop 3 $ bytes -- getInt8
+        rawip = fmap fromIntegral . B.unpack . B.drop 4 $ bytes -- <$> getNByteString (len - 4) -- 4 = 2 + 1 + 1
+    ip <- case fam of
+            1 -> pure . IPv4 . toIPv4 $ take 4 (rawip ++ repeat 0)
+            2 -> pure . IPv6 . toIPv6b $ take 16 (rawip ++ repeat 0)
+            _ -> fail "Unsupported address family"
+    pure $ OD_ClientSubnet srcMask scpMask ip
 decodeOData (OUNKNOWN i) len = OD_Unknown i <$> getNByteString len
 
 ----------------------------------------------------------------
@@ -311,5 +398,5 @@ decodeDomain = do
     isPointer c = testBit c 7 && testBit c 6
     isExtLabel c = (not $ testBit c 7) && testBit c 6
 
-ignoreClass :: SGet ()
-ignoreClass = () <$ get16
+-- ignoreClass :: SGet ()
+-- ignoreClass = () <$ get16
