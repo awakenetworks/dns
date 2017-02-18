@@ -254,7 +254,7 @@ decodeRData CNAME _ = RD_CNAME <$> decodeDomain
 decodeRData DNAME _ = RD_DNAME <$> decodeDomain
 decodeRData TXT len = (RD_TXT . ignoreLength) <$> getNByteString len
   where
-    ignoreLength = BS.tail
+    ignoreLength = BS.drop 1
 decodeRData A len
   | len == 4  = (RD_A . toIPv4) <$> getNBytes len
   | otherwise = fail "IPv4 addresses must be 4 bytes long"
