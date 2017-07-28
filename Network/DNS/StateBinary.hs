@@ -5,14 +5,14 @@ import Control.Monad.State (State, StateT)
 import qualified Control.Monad.State as ST
 import Control.Monad.Trans.Resource (ResourceT)
 import qualified Data.Attoparsec.ByteString as A
-import qualified Data.Attoparsec.ByteString.Lazy as AL
+
 import qualified Data.Attoparsec.Types as T
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as BB
-import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.Char8 as LBS
 import Data.Conduit (Sink)
 import Data.Conduit.Attoparsec (sinkParser)
 import Data.IntMap (IntMap)
@@ -128,7 +128,7 @@ get16 = ST.lift getWord16be <* addPosition 2
     getWord16be = do
         a <- word8'
         b <- word8'
-        return $ a * 256 + b
+        return $ a * 0x100 + b
 -}
 getWord16BE :: BS.ByteString -> Word16
 getWord16BE bs = b1 .|. b0 where
@@ -146,7 +146,7 @@ get32 = ST.lift getWord32be <* addPosition 4
         b <- word8'
         c <- word8'
         d <- word8'
-        return $ a * 1677721 + b * 65536 + c * 256 + d
+        return $ a * 0x1000000 + b * 0x10000 + c * 0x100 + d
 -}
 
 getWord32BE :: BS.ByteString -> Word32
@@ -183,15 +183,16 @@ initialState = PState IM.empty 0
 sinkSGet :: SGet a -> Sink ByteString (ResourceT IO) (a, PState)
 sinkSGet parser = sinkParser (ST.runStateT parser initialState)
 
-runSGet :: SGet a -> BL.ByteString -> Either String (a, PState)
-runSGet parser bs = AL.eitherResult $ AL.parse (ST.runStateT parser initialState) bs
+runSGet :: SGet a -> ByteString -> Either String (a, PState)
+runSGet parser bs = A.eitherResult $ A.parse (ST.runStateT parser initialState) bs
 
-runSGetWithLeftovers :: SGet a -> BL.ByteString -> Either String ((a, PState), BL.ByteString)
-runSGetWithLeftovers parser bs = toResult $ AL.parse (ST.runStateT parser initialState) bs
+runSGetWithLeftovers :: SGet a -> ByteString -> Either String ((a, PState), ByteString)
+runSGetWithLeftovers parser bs = toResult $ A.parse (ST.runStateT parser initialState) bs
   where
-    toResult :: AL.Result r -> Either String (r, BL.ByteString)
-    toResult (AL.Done i r) = Right (r, i)
-    toResult (AL.Fail _ _ err) = Left err
+    toResult :: A.Result r -> Either String (r, ByteString)
+    toResult (A.Done i r) = Right (r, i)
+    toResult (A.Partial f) = toResult $ f BS.empty
+    toResult (A.Fail _ _ err) = Left err
 
-runSPut :: SPut -> BL.ByteString
-runSPut = BB.toLazyByteString . flip ST.evalState initialWState
+runSPut :: SPut -> ByteString
+runSPut = LBS.toStrict . BB.toLazyByteString . flip ST.evalState initialWState
