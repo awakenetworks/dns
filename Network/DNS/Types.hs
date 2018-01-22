@@ -157,6 +157,10 @@ pattern TXT        = TYPE  16
 -- | IPv6 Address
 pattern AAAA :: TYPE
 pattern AAAA       = TYPE  28
+-- | NetBIOS general Name Service Resource Record (RFC1002)
+pattern NetBiosNB :: TYPE
+pattern NetBiosNB = TYPE 32
+
 -- | Server Selection (RFC2782)
 pattern SRV :: TYPE
 pattern SRV        = TYPE  33
@@ -210,6 +214,7 @@ instance Show TYPE where
     show MX         = "MX"
     show TXT        = "TXT"
     show AAAA       = "AAAA"
+    show NetBiosNB  = "NB"
     show SRV        = "SRV"
     show DNAME      = "DNAME"
     show OPT        = "OPT"
@@ -240,6 +245,7 @@ data TYPE = A          -- ^ IPv4 address
           | MX         -- ^ Mail exchange
           | TXT        -- ^ Text strings
           | AAAA       -- ^ IPv6 Address
+          | NetBiosNB  -- ^ NetBIOS general Name Service Resource Record (RFC1002)
           | SRV        -- ^ Server Selection (RFC2782)
           | DNAME      -- ^ DNAME (RFC6672)
           | OPT        -- ^ OPT (RFC6891)
@@ -269,6 +275,7 @@ fromTYPE PTR        = 12
 fromTYPE MX         = 15
 fromTYPE TXT        = 16
 fromTYPE AAAA       = 28
+fromTYPE NetBiosNB  = 32
 fromTYPE SRV        = 33
 fromTYPE DNAME      = 39
 fromTYPE OPT        = 41
@@ -296,6 +303,7 @@ toTYPE 12 = PTR
 toTYPE 15 = MX
 toTYPE 16 = TXT
 toTYPE 28 = AAAA
+toTYPE 32 = NetBiosNB
 toTYPE 33 = SRV
 toTYPE 39 = DNAME
 toTYPE 41 = OPT
