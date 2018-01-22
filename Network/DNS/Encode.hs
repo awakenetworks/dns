@@ -78,9 +78,6 @@ putHeader hdr = putIdentifier (identifier hdr)
 putDNSFlags :: DNSFlags -> SPut
 putDNSFlags DNSFlags{..} = put16 word
   where
-    word16 :: Enum a => a -> Word16
-    word16 = toEnum . fromEnum
-
     set :: Word16 -> State Word16 ()
     set byte = modify (.|. byte)
 
