@@ -55,7 +55,7 @@ module Network.DNS.Types (
   , Identifier
   , QorR (..)
   , DNSFlags (..)
-  , OPCODE (..), toOPCODE, fromOPCODE,
+  , OPCODE (..), toOPCODE, fromOPCODE
   , RCODE (
     NoErr
   , FormatErr
