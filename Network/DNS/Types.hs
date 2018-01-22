@@ -16,31 +16,31 @@ module Network.DNS.Types (
   , TTL
   -- ** Resource Record Types
   , TYPE (
-    A
-  , NS
-  , CNAME
-  , SOA
-  , NULL
-  , PTR
-  , MX
-  , TXT
-  , AAAA
-  , NetBiosNB
-  , SRV
-  , DNAME
-  , OPT
-  , DS
-  , RRSIG
-  , NSEC
-  , DNSKEY
-  , NSEC3
-  , NSEC3PARAM
-  , TLSA
-  , CDS
-  , CDNSKEY
-  , CSYNC
-  , ANY
-  )
+      A
+    , NS
+    , CNAME
+    , SOA
+    , NULL
+    , PTR
+    , MX
+    , TXT
+    , AAAA
+    , NetBiosNB
+    , SRV
+    , DNAME
+    , OPT
+    , DS
+    , RRSIG
+    , NSEC
+    , DNSKEY
+    , NSEC3
+    , NSEC3PARAM
+    , TLSA
+    , CDS
+    , CDNSKEY
+    , CSYNC
+    , ANY
+    )
   , fromTYPE
   , toTYPE
   -- ** Resource Data
@@ -158,9 +158,10 @@ pattern TXT        = TYPE  16
 -- | IPv6 Address
 pattern AAAA :: TYPE
 pattern AAAA       = TYPE  28
+
 -- | NetBIOS general Name Service Resource Record (RFC1002)
 pattern NetBiosNB :: TYPE
-pattern NetBiosNB = TYPE 32
+pattern NetBiosNB  = TYPE 32
 
 -- | Server Selection (RFC2782)
 pattern SRV :: TYPE
