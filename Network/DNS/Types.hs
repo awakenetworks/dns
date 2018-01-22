@@ -25,6 +25,7 @@ module Network.DNS.Types (
   , MX
   , TXT
   , AAAA
+  , NetBiosNB
   , SRV
   , DNAME
   , OPT
