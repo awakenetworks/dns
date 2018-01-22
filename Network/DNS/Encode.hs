@@ -92,7 +92,7 @@ putDNSFlags DNSFlags{..} = put16 word
               , when recDesired          $ set (bit 8)
               , when trunCation          $ set (bit 9)
               , when authAnswer          $ set (bit 10)
-              , set (word16 opcode `shiftL` 11)
+              , set (fromOPCODE opcode `shiftL` 11)
               , when (qOrR==QR_Response) $ set (bit 15)
               ]
 

@@ -54,7 +54,7 @@ module Network.DNS.Types (
   , Identifier
   , QorR (..)
   , DNSFlags (..)
-  , OPCODE (..)
+  , OPCODE (..), toOPCODE
   , RCODE (
     NoErr
   , FormatErr
@@ -423,7 +423,21 @@ data OPCODE
   = OP_STD -- ^ A standard query.
   | OP_INV -- ^ An inverse query.
   | OP_SSR -- ^ A server status request.
+  | OP_REG -- ^ A registration request
   deriving (Eq, Show, Enum, Bounded)
+
+toOPCODE :: Word8 -> Maybe OPCODE
+toOPCODE 0x00 = Just OP_STD
+toOPCODE 0x01 = Just OP_INV
+toOPCODE 0x02 = Just OP_SSR
+toOPCODE 0x05 = Just OP_REG
+toOPCODE _    = Nothing
+
+fromOPCODE :: Num n => OPCODE -> n
+fromOPCODE OP_STD = 0x00
+fromOPCODE OP_INV = 0x01
+fromOPCODE OP_SSR = 0x02
+fromOPCODE OP_REG = 0x05
 
 ----------------------------------------------------------------
 
