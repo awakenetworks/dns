@@ -59,7 +59,8 @@ decode bs = fst <$> runSGet (fitSGet (B.length bs) getResponse) bs
 decodeLenient :: ByteString          -- ^ encoded input buffer
               -> Either DNSError (DNSMessage, ByteString)
                    -- ^ decoded message and unconsumed data, or error
-decodeLenient bs = fmap psInput <$> runSGet getResponse bs
+decodeLenient bs =
+  fmap (B.drop <$> psPosition <*> psInput) <$> runSGet getResponse bs
 
 -- | Decode a buffer containing multiple encoded DNS messages each preceded by
 -- a 16-bit length in network byte order.  Any left-over bytes of a partial
