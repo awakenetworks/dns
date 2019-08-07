@@ -17,6 +17,7 @@ module Network.DNS.Decode (
     -- * Decoding a single DNS message
     decodeAt
   , decode
+  , decodeLenient
     -- * Decoding multple length-encoded DNS messages,
     -- e.g., from TCP traffic.
   , decodeManyAt
@@ -53,6 +54,12 @@ decodeAt t bs = fst <$> runSGetAt t (fitSGet (B.length bs) getResponse) bs
 decode :: ByteString                 -- ^ encoded input buffer
        -> Either DNSError DNSMessage -- ^ decoded message or error
 decode bs = fst <$> runSGet (fitSGet (B.length bs) getResponse) bs
+
+-- | Similar to 'decode' but returns excess content instead of failing.
+decodeLenient :: ByteString          -- ^ encoded input buffer
+              -> Either DNSError (DNSMessage, ByteString)
+                   -- ^ decoded message and unconsumed data, or error
+decodeLenient bs = fmap psInput <$> runSGet getResponse bs
 
 -- | Decode a buffer containing multiple encoded DNS messages each preceded by
 -- a 16-bit length in network byte order.  Any left-over bytes of a partial
